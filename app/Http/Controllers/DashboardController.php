@@ -7,12 +7,27 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function getCounts()
+    public function getCounts(Request $request)
     {
+        $user = $request->user();
+
+        if ($user->rol === 'superusuario') {
+            return response()->json([
+                'estudiantes' => DB::table('estudiantes')->count(),
+                'secciones' => DB::table('secciones')->count(),
+                'alertas' => DB::table('alertas')->where('resuelta', false)->count(),
+            ]);
+        }
+
+        // Si es Auxiliar, filtrar por sus secciones
+        $seccionesIds = DB::table('auxiliar_secciones')
+            ->where('usuario_id', $user->id)
+            ->pluck('seccion_id');
+
         return response()->json([
-            'estudiantes' => DB::table('estudiantes')->count(),
-            'secciones' => DB::table('secciones')->count(),
-            'alertas' => DB::table('alertas')->where('resuelta', false)->count(),
+            'estudiantes' => DB::table('estudiantes')->whereIn('seccion_id', $seccionesIds)->count(),
+            'secciones' => $seccionesIds->count(),
+            'alertas' => 0, // Por ahora 0 hasta implementar alertas reales por sección
         ]);
     }
 
