@@ -65,6 +65,53 @@ class SuperUserController extends Controller
     }
 
     /**
+     * Update an existing auxiliary.
+     */
+    public function updateAuxiliar(Request $request, $id)
+    {
+        $user = User::findOrFail($id);
+
+        if ($user->rol !== 'auxiliar') {
+            return response()->json(['message' => 'Solo se puede editar auxiliares.'], 400);
+        }
+
+        $request->validate([
+            'nombre_completo' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:usuarios,email,' . $user->id,
+            'dni' => 'required|string|size:8|unique:usuarios,dni,' . $user->id,
+            'grado_id' => 'required|uuid|exists:grados,id',
+        ]);
+
+        return DB::transaction(function () use ($request, $user) {
+            $user->update([
+                'nombre_completo' => $request->nombre_completo,
+                'email' => $request->email,
+                'dni' => $request->dni,
+            ]);
+
+            // Actualizar asignación de grado si ha cambiado
+            $currentGradoId = $user->secciones()->first()?->grado_id;
+
+            if ($currentGradoId !== $request->grado_id) {
+                AuxiliarSeccion::where('usuario_id', $user->id)->delete();
+                $grado = Grado::with('secciones')->find($request->grado_id);
+                foreach ($grado->secciones as $seccion) {
+                    AuxiliarSeccion::create([
+                        'usuario_id' => $user->id,
+                        'seccion_id' => $seccion->id,
+                        'activo' => true,
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'message' => 'Auxiliar actualizado correctamente.',
+                'user' => $user->load('secciones.grado'),
+            ]);
+        });
+    }
+
+    /**
      * Activate or deactivate an auxiliary.
      */
     public function toggleAuxiliarStatus($id)
