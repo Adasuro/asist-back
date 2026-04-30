@@ -51,4 +51,25 @@ class EloquentStudentRepository implements StudentRepositoryInterface
     {
         return Estudiante::updateOrCreate($search, $data);
     }
+
+    public function findById(string $id): ?Estudiante
+    {
+        return Estudiante::with(['seccion.grado'])->find($id);
+    }
+
+    public function update(string $id, array $data): Estudiante
+    {
+        $student = Estudiante::findOrFail($id);
+        $student->update($data);
+        return $student;
+    }
+
+    public function delete(string $id): bool
+    {
+        $student = Estudiante::find($id);
+        if ($student) {
+            return $student->delete();
+        }
+        return false;
+    }
 }

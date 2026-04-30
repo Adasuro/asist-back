@@ -142,6 +142,29 @@ class StudentService
         return ['type' => $exists ? 'updated' : 'success'];
     }
 
+    public function getStudentById($id)
+    {
+        return $this->studentRepository->findById($id);
+    }
+
+    public function updateStudent($id, array $data)
+    {
+        $student = $this->studentRepository->findById($id);
+        if (!$student) throw new \Exception("Estudiante no encontrado");
+
+        // El código de sistema se mantiene igual si el DNI no cambia
+        if (isset($data['dni']) && $data['dni'] !== $student->dni) {
+            $data['codigo_sistema'] = $this->generateSystemCode($data['dni']);
+        }
+
+        return $this->studentRepository->update($id, $data);
+    }
+
+    public function deleteStudent($id)
+    {
+        return $this->studentRepository->delete($id);
+    }
+
     private function generateSystemCode($dni)
     {
         return "EST-{$dni}-" . date('Y');

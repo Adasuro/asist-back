@@ -30,7 +30,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/grados', [SuperUserController::class, 'listGrados']);
         Route::get('/students/template', [StudentController::class, 'downloadTemplate']);
         Route::get('/students', [StudentController::class, 'index']);
+        Route::get('/students/{id}', [StudentController::class, 'show']);
         Route::post('/students', [StudentController::class, 'store']);
+        Route::patch('/students/{id}', [StudentController::class, 'update']);
+        Route::delete('/students/{id}', [StudentController::class, 'destroy']);
         Route::post('/students/import', [StudentController::class, 'importCSV']);
     });
 });

@@ -44,6 +44,36 @@ class StudentController extends Controller
         ]);
     }
 
+    public function show($id)
+    {
+        return response()->json($this->studentService->getStudentById($id));
+    }
+
+    public function update(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'nombre_completo' => 'required|string|max:255',
+            'dni' => 'required|string|digits:8',
+            'seccion_id' => 'required|exists:secciones,id',
+            'fecha_nacimiento' => 'nullable|date',
+            'telefono' => 'nullable|string',
+            'direccion' => 'nullable|string',
+        ]);
+
+        $student = $this->studentService->updateStudent($id, $validated);
+
+        return response()->json([
+            'message' => 'Estudiante actualizado correctamente.',
+            'student' => $student
+        ]);
+    }
+
+    public function destroy($id)
+    {
+        $this->studentService->deleteStudent($id);
+        return response()->json(['message' => 'Estudiante eliminado correctamente.']);
+    }
+
     public function importCSV(Request $request)
     {
         $request->validate(['file' => 'required|file']);
