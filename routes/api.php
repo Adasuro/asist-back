@@ -35,5 +35,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/students/{id}', [StudentController::class, 'update']);
         Route::delete('/students/{id}', [StudentController::class, 'destroy']);
         Route::post('/students/import', [StudentController::class, 'importCSV']);
+
+        // Attendance Routes
+        Route::post('/attendance', [App\Http\Controllers\AttendanceController::class, 'store']);
+        Route::get('/attendance/section/{sectionId}/daily', [App\Http\Controllers\AttendanceController::class, 'sectionDaily']);
+
+        // Justification Routes
+        Route::post('/justifications', [App\Http\Controllers\JustificationController::class, 'store']);
+        Route::get('/justifications/attendance/{asistenciaId}', [App\Http\Controllers\JustificationController::class, 'show']);
+
+        // Report Routes
+        Route::get('/reports/attendance-stats', [App\Http\Controllers\ReportController::class, 'getAttendanceStats']);
     });
 });
