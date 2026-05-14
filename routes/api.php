@@ -7,11 +7,19 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\SuperUserController;
 use App\Http\Controllers\StudentController;
 
+use App\Http\Controllers\ProfileController;
+
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Profile Routes
+    Route::get('/profile', [ProfileController::class, 'show']);
+    Route::post('/profile', [ProfileController::class, 'update']);
+    Route::post('/profile/photo', [ProfileController::class, 'updatePhoto']);
+    Route::patch('/profile/password', [ProfileController::class, 'updatePassword']);
 
     // Dashboard Stats & Sections
     Route::get('/stats/counts', [DashboardController::class, 'getCounts']);
@@ -46,5 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Report Routes
         Route::get('/reports/attendance-stats', [App\Http\Controllers\ReportController::class, 'getAttendanceStats']);
+        Route::get('/reports/export-excel', [App\Http\Controllers\ReportController::class, 'exportExcel']);
+        Route::get('/reports/export-pdf', [App\Http\Controllers\ReportController::class, 'exportPdf']);
     });
 });
