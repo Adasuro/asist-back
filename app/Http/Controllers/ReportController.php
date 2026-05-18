@@ -101,6 +101,72 @@ class ReportController extends Controller
         return response()->json($result);
     }
 
+    public function getStudentPerformance(Request $request)
+    {
+        $user = $request->user();
+        $sectionId = $request->query('seccion_id');
+        $fechaInicio = $request->query('fecha_inicio');
+        $fechaFin = $request->query('fecha_fin');
+
+        if (!$sectionId) {
+            return response()->json(['error' => 'Debe seleccionar una sección.'], 400);
+        }
+
+        // Seguridad: Validar acceso del auxiliar
+        if ($user->rol === 'auxiliar') {
+            $assigned = DB::table('auxiliar_secciones')
+                ->where('usuario_id', $user->id)
+                ->where('seccion_id', $sectionId)
+                ->exists();
+            if (!$assigned) {
+                return response()->json(['error' => 'No tiene acceso a esta sección.'], 403);
+            }
+        }
+
+        // Obtener todos los alumnos de la sección para asegurar que aparezcan aunque no tengan asistencias registradas
+        $students = DB::table('estudiantes')
+            ->where('seccion_id', $sectionId)
+            ->where('activo', true)
+            ->select('id', 'nombre_completo', 'dni')
+            ->orderBy('nombre_completo')
+            ->get();
+
+        $performance = $students->map(function ($student) use ($fechaInicio, $fechaFin) {
+            $query = DB::table('asistencias')
+                ->leftJoin('justificaciones', 'asistencias.id', '=', 'justificaciones.asistencia_id')
+                ->where('asistencias.estudiante_id', $student->id);
+
+            if ($fechaInicio && $fechaFin) {
+                $query->whereBetween('asistencias.fecha', [$fechaInicio, $fechaFin]);
+            }
+
+            $stats = $query->select(
+                DB::raw("COUNT(*) as total_dias"),
+                DB::raw("SUM(CASE WHEN estado IN ('presente', 'tardanza') THEN 1 ELSE 0 END) as asistencias"),
+                DB::raw("SUM(CASE WHEN estado = 'falta' THEN 1 ELSE 0 END) as faltas_totales"),
+                DB::raw("SUM(CASE WHEN estado = 'tardanza' AND justificaciones.id IS NULL THEN 1 ELSE 0 END) as tardanzas_injustificadas"),
+                DB::raw("SUM(CASE WHEN estado = 'falta' AND justificaciones.id IS NULL THEN 1 ELSE 0 END) as faltas_injustificadas"),
+                DB::raw("SUM(CASE WHEN justificaciones.id IS NOT NULL THEN 1 ELSE 0 END) as total_justificados")
+            )->first();
+
+            return [
+                'nombre_completo' => $student->nombre_completo,
+                'dni' => $student->dni,
+                'total_dias' => $stats->total_dias ?? 0,
+                'asistencias' => $stats->asistencias ?? 0,
+                'faltas_totales' => $stats->faltas_totales ?? 0,
+                'faltas_injustificadas' => $stats->faltas_injustificadas ?? 0,
+                'tardanzas_injustificadas' => $stats->tardanzas_injustificadas ?? 0,
+                'total_justificados' => $stats->total_justificados ?? 0,
+                'porcentaje_asistencia' => ($stats->total_dias > 0) 
+                    ? round(($stats->asistencias / $stats->total_dias) * 100, 1) 
+                    : 0
+            ];
+        });
+
+        return response()->json($performance);
+    }
+
     public function exportExcel(Request $request)
     {
         $query = $this->getBaseQuery($request);

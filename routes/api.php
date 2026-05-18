@@ -23,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Dashboard Stats & Sections
     Route::get('/stats/counts', [DashboardController::class, 'getCounts']);
+    Route::get('/stats/advanced', [DashboardController::class, 'getAdvancedStats']);
     Route::get('/sections/assigned', [DashboardController::class, 'getAssignedSections']);
 
     // Admin Specific Routes
@@ -54,6 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Report Routes
         Route::get('/reports/attendance-stats', [App\Http\Controllers\ReportController::class, 'getAttendanceStats']);
+        Route::get('/reports/student-performance', [App\Http\Controllers\ReportController::class, 'getStudentPerformance']);
         Route::get('/reports/export-excel', [App\Http\Controllers\ReportController::class, 'exportExcel']);
         Route::get('/reports/export-pdf', [App\Http\Controllers\ReportController::class, 'exportPdf']);
     });
