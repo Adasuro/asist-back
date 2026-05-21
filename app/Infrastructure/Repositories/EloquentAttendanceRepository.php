@@ -15,10 +15,7 @@ class EloquentAttendanceRepository implements AttendanceRepositoryInterface
                 'estudiante_id' => $data['estudiante_id'],
                 'fecha' => $data['fecha'] ?? now()->toDateString(),
             ],
-            array_merge($data, [
-                'id' => $data['id'] ?? (string) Str::uuid(),
-                'hora_llegada' => $data['hora_llegada'] ?? now()->toTimeString(),
-            ])
+            $data
         );
     }
 
