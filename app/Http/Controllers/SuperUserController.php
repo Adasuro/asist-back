@@ -157,6 +157,6 @@ class SuperUserController extends Controller
      */
     public function listGrados()
     {
-        return response()->json(Grado::all());
+        return response()->json(Grado::with('secciones')->get());
     }
 }

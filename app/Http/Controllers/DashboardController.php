@@ -153,18 +153,23 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        $sections = DB::table('auxiliar_secciones')
-            ->join('secciones', 'auxiliar_secciones.seccion_id', '=', 'secciones.id')
+        $query = DB::table('secciones')
             ->join('grados', 'secciones.grado_id', '=', 'grados.id')
-            ->where('auxiliar_secciones.usuario_id', $user->id)
-            ->where('auxiliar_secciones.activo', true)
+            ->where('secciones.activo', true)
             ->select(
                 'secciones.id',
                 'secciones.nombre',
                 'grados.nombre as grado_nombre',
                 'grados.nivel as grado_nivel'
-            )
-            ->get();
+            );
+
+        if ($user->rol === 'auxiliar') {
+            $query->join('auxiliar_secciones', 'secciones.id', '=', 'auxiliar_secciones.seccion_id')
+                  ->where('auxiliar_secciones.usuario_id', $user->id)
+                  ->where('auxiliar_secciones.activo', true);
+        }
+
+        $sections = $query->get();
 
         return response()->json($sections->map(function ($sec) {
             return [

@@ -65,8 +65,12 @@ class AttendanceService
 
         $attendance = $this->attendanceRepository->register($registrationData);
 
-        // Disparar validación de alertas
-        $this->checkAndGenerateAlerts($student->id);
+        // Disparar validación de alertas de forma segura
+        try {
+            $this->checkAndGenerateAlerts($student->id);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Error al generar alertas: " . $e->getMessage());
+        }
 
         return $attendance;
     }

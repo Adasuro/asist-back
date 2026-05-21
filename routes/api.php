@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:superusuario')->prefix('admin')->group(function () {
         Route::get('/auxiliaries', [SuperUserController::class, 'listAuxiliaries']);
         Route::post('/auxiliaries', [SuperUserController::class, 'createAuxiliar']);
+        Route::patch('/auxiliaries/{id}', [SuperUserController::class, 'updateAuxiliar']);
         Route::patch('/auxiliaries/{id}/toggle', [SuperUserController::class, 'toggleAuxiliarStatus']);
         Route::patch('/auxiliaries/{id}/password', [SuperUserController::class, 'updateAuxiliarPassword']);
     });
