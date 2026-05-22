@@ -49,8 +49,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // Attendance Routes
         Route::post('/attendance', [App\Http\Controllers\AttendanceController::class, 'store']);
         Route::get('/attendance/section/{sectionId}/daily', [App\Http\Controllers\AttendanceController::class, 'sectionDaily']);
+        Route::post('/attendance/section/{sectionId}/officiate', [App\Http\Controllers\AttendanceController::class, 'officiate']);
 
         // Justification Routes
+        Route::get('/justifications', [App\Http\Controllers\JustificationController::class, 'index']);
         Route::post('/justifications', [App\Http\Controllers\JustificationController::class, 'store']);
         Route::get('/justifications/attendance/{asistenciaId}', [App\Http\Controllers\JustificationController::class, 'show']);
 

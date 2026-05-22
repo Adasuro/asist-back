@@ -39,4 +39,14 @@ class AttendanceController extends Controller
     {
         return response()->json($this->attendanceService->getDailyAttendance($sectionId));
     }
+
+    public function officiate($sectionId)
+    {
+        try {
+            $this->attendanceService->officiateSection($sectionId);
+            return response()->json(['message' => 'Asistencia confirmada correctamente.']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
 }

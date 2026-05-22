@@ -9,6 +9,15 @@ use Illuminate\Support\Facades\Auth;
 
 class JustificationController extends Controller
 {
+    public function index()
+    {
+        $justifications = Justificacion::with(['asistencia.estudiante.seccion.grado', 'registradoPor'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
+        return response()->json($justifications);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
