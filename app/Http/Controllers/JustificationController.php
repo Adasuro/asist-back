@@ -9,11 +9,19 @@ use Illuminate\Support\Facades\Auth;
 
 class JustificationController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $justifications = Justificacion::with(['asistencia.estudiante.seccion.grado', 'registradoPor'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = Justificacion::with(['asistencia.estudiante.seccion.grado', 'registradoPor'])
+            ->orderBy('created_at', 'desc');
+
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            $query->whereHas('asistencia.estudiante', function ($q) use ($assignedSections) {
+                $q->whereIn('seccion_id', $assignedSections);
+            });
+        }
+
+        $justifications = $query->get();
             
         return response()->json($justifications);
     }
@@ -27,6 +35,14 @@ class JustificationController extends Controller
         ]);
 
         $asistencia = Asistencia::findOrFail($validated['asistencia_id']);
+        
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($asistencia->seccion_id, $assignedSections)) {
+                return response()->json(['error' => 'No tiene permiso para justificar en esta sección.'], 403);
+            }
+        }
+
         $now = now();
 
         // 1. Validar plazo de 3 días hábiles para justificar
@@ -74,9 +90,17 @@ class JustificationController extends Controller
         ]);
     }
 
-    public function show($asistenciaId)
+    public function show(Request $request, $asistenciaId)
     {
-        $justification = Justificacion::where('asistencia_id', $asistenciaId)->first();
+        $justification = Justificacion::with('asistencia')->where('asistencia_id', $asistenciaId)->first();
+        
+        if ($justification && $request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($justification->asistencia->seccion_id, $assignedSections)) {
+                return response()->json(['error' => 'No tiene permiso.'], 403);
+            }
+        }
+
         return response()->json($justification);
     }
 }

@@ -44,13 +44,37 @@ class StudentController extends Controller
         ]);
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        return response()->json($this->studentService->getStudentById($id));
+        $student = $this->studentService->getStudentById($id);
+        if (!$student) {
+            return response()->json(['message' => 'Estudiante no encontrado.'], 404);
+        }
+
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($student->seccion_id, $assignedSections)) {
+                return response()->json(['message' => 'No tiene permiso para acceder a este estudiante.'], 403);
+            }
+        }
+
+        return response()->json($student);
     }
 
     public function update(Request $request, $id)
     {
+        $student = $this->studentService->getStudentById($id);
+        if (!$student) {
+            return response()->json(['message' => 'Estudiante no encontrado.'], 404);
+        }
+
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($student->seccion_id, $assignedSections)) {
+                return response()->json(['message' => 'No tiene permiso para actualizar a este estudiante.'], 403);
+            }
+        }
+
         $validated = $request->validate([
             'nombre_completo' => 'required|string|max:255',
             'dni' => 'required|string|digits:8',
@@ -60,23 +84,37 @@ class StudentController extends Controller
             'direccion' => 'nullable|string',
         ]);
 
-        $student = $this->studentService->updateStudent($id, $validated);
+        $updatedStudent = $this->studentService->updateStudent($id, $validated);
 
         return response()->json([
             'message' => 'Estudiante actualizado correctamente.',
-            'student' => $student
+            'student' => $updatedStudent
         ]);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $student = $this->studentService->getStudentById($id);
+        if (!$student) {
+            return response()->json(['message' => 'Estudiante no encontrado.'], 404);
+        }
+
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($student->seccion_id, $assignedSections)) {
+                return response()->json(['message' => 'No tiene permiso para eliminar a este estudiante.'], 403);
+            }
+        }
+
         $this->studentService->deleteStudent($id);
         return response()->json(['message' => 'Estudiante eliminado correctamente.']);
     }
 
     public function importCSV(Request $request)
     {
-        $request->validate(['file' => 'required|file']);
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt|max:2048'
+        ]);
 
         try {
             $stats = $this->studentService->importFromCSV($request->file('file'));

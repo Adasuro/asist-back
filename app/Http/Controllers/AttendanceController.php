@@ -24,6 +24,20 @@ class AttendanceController extends Controller
             'observacion' => 'nullable|string',
         ]);
 
+        $student = null;
+        if (isset($validated['estudiante_id'])) {
+            $student = \App\Models\Estudiante::find($validated['estudiante_id']);
+        } elseif (isset($validated['codigo_sistema'])) {
+            $student = \App\Models\Estudiante::where('codigo_sistema', $validated['codigo_sistema'])->first();
+        }
+
+        if ($student && $request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($student->seccion_id, $assignedSections)) {
+                return response()->json(['error' => 'No tiene permiso para registrar asistencia a este estudiante.'], 403);
+            }
+        }
+
         try {
             $attendance = $this->attendanceService->registerAttendance($validated);
             return response()->json([
@@ -35,13 +49,25 @@ class AttendanceController extends Controller
         }
     }
 
-    public function sectionDaily($sectionId)
+    public function sectionDaily(Request $request, $sectionId)
     {
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($sectionId, $assignedSections)) {
+                return response()->json(['error' => 'No tiene permiso para ver esta sección.'], 403);
+            }
+        }
         return response()->json($this->attendanceService->getDailyAttendance($sectionId));
     }
 
-    public function officiate($sectionId)
+    public function officiate(Request $request, $sectionId)
     {
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($sectionId, $assignedSections)) {
+                return response()->json(['error' => 'No tiene permiso para oficializar esta sección.'], 403);
+            }
+        }
         try {
             $this->attendanceService->officiateSection($sectionId);
             return response()->json(['message' => 'Asistencia confirmada correctamente.']);
