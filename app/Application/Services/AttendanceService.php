@@ -4,6 +4,9 @@ namespace App\Application\Services;
 
 use App\Domain\Repositories\AttendanceRepositoryInterface;
 use App\Models\Estudiante;
+use App\Models\Asistencia;
+use App\Models\Alerta;
+use App\Models\RegistroAsistenciaOficial;
 use Illuminate\Support\Facades\Auth;
 
 class AttendanceService
@@ -36,6 +39,29 @@ class AttendanceService
         if (isset($data['fecha']) && $data['fecha'] !== $currentDate) {
             throw new \Exception("Solo se pueden registrar o editar asistencias del día en curso.");
         }
+
+        // Verificar si la asistencia ya ha sido confirmada (oficializada)
+        $isOfficial = RegistroAsistenciaOficial::where('seccion_id', $student->seccion_id)
+            ->where('fecha', $currentDate)
+            ->exists();
+
+        if ($isOfficial) {
+            $existing = Asistencia::where('estudiante_id', $student->id)
+                ->where('fecha', $currentDate)
+                ->first();
+
+            $newStatus = $data['estado'] ?? 'presente';
+
+            // Regla 1: No se puede marcar como "Presente" si ya es oficial
+            if ($newStatus === 'presente') {
+                throw new \Exception("BLOQUEADO: No se puede registrar como 'Presente' después de la confirmación oficial.");
+            }
+
+            // Regla 2: Si el registro previo era "Presente", ya no se puede modificar
+            if ($existing && $existing->estado === 'presente') {
+                throw new \Exception("BLOQUEADO: Los registros marcados como 'Presente' son inmutables tras la confirmación.");
+            }
+        }
         
         $currentTime = $now->format('H:i:s');
         
@@ -45,7 +71,7 @@ class AttendanceService
         if (($data['metodo_registro'] ?? 'manual') === 'codigo') {
             $entryTime = $now->format('H:i');
             
-            if ($entryTime >= '07:40' && $entryTime <= '08:10') {
+            if ($entryTime >= '10:18' && $entryTime <= '10:25') {
                 $status = 'presente';
             } else {
                 $status = 'tardanza';
@@ -75,15 +101,59 @@ class AttendanceService
         return $attendance;
     }
 
+    public function officiateSection($sectionId)
+    {
+        $fecha = now()->toDateString();
+        
+        // 1. Verificar si ya es oficial
+        $exists = RegistroAsistenciaOficial::where('seccion_id', $sectionId)
+            ->where('fecha', $fecha)
+            ->exists();
+            
+        if ($exists) {
+            throw new \Exception("La asistencia de hoy para esta sección ya ha sido confirmada.");
+        }
+        
+        // 2. Marcar faltas automáticas para alumnos sin registro
+        $students = Estudiante::where('seccion_id', $sectionId)->get();
+        foreach ($students as $student) {
+            $hasAttendance = Asistencia::where('estudiante_id', $student->id)
+                ->where('fecha', $fecha)
+                ->exists();
+                
+            if (!$hasAttendance) {
+                $this->attendanceRepository->register([
+                    'estudiante_id' => $student->id,
+                    'registrado_por' => Auth::id(),
+                    'seccion_id' => $sectionId,
+                    'fecha' => $fecha,
+                    'estado' => 'falta',
+                    'metodo_registro' => 'manual',
+                    'observacion' => 'Marcado automáticamente al confirmar asistencia.',
+                ]);
+                
+                $this->checkAndGenerateAlerts($student->id);
+            }
+        }
+        
+        // 3. Registrar oficialización
+        return RegistroAsistenciaOficial::create([
+            'seccion_id' => $sectionId,
+            'fecha' => $fecha,
+            'oficializado_por' => Auth::id()
+        ]);
+    }
+
     public function checkAndGenerateAlerts($studentId)
     {
+// ... rest of the code stays same
         $student = Estudiante::find($studentId);
         if (!$student) return;
 
         $now = now();
 
         // 1. Lógica de Tardanzas (Mensual - 3 Injustificadas = 1 Falta)
-        $tardanzasInjustificadas = \App\Models\Asistencia::where('estudiante_id', $studentId)
+        $tardanzasInjustificadas = Asistencia::where('estudiante_id', $studentId)
             ->where('estado', 'tardanza')
             ->whereMonth('fecha', $now->month)
             ->whereYear('fecha', $now->year)
@@ -93,7 +163,7 @@ class AttendanceService
         $faltasPorTardanza = floor($tardanzasInjustificadas / 3);
 
         if ($faltasPorTardanza > 0) {
-            \App\Models\Alerta::updateOrCreate(
+            Alerta::updateOrCreate(
                 [
                     'estudiante_id' => $studentId,
                     'tipo' => 'tardanzas_a_falta',
@@ -108,14 +178,14 @@ class AttendanceService
         }
 
         // 2. Lógica de Faltas Excesivas (Anual - 5 Injustificadas)
-        $faltasInjustificadas = \App\Models\Asistencia::where('estudiante_id', $studentId)
+        $faltasInjustificadas = Asistencia::where('estudiante_id', $studentId)
             ->where('estado', 'falta')
             ->whereYear('fecha', $now->year)
             ->whereDoesntHave('justificacion')
             ->count();
 
         if ($faltasInjustificadas >= 5) {
-            \App\Models\Alerta::firstOrCreate(
+            Alerta::firstOrCreate(
                 [
                     'estudiante_id' => $studentId,
                     'tipo' => 'faltas_excesivas',
@@ -127,7 +197,7 @@ class AttendanceService
             );
         } else {
             // Si el número baja de 5 (por una justificación tardía), marcamos la alerta como resuelta
-            \App\Models\Alerta::where('estudiante_id', $studentId)
+            Alerta::where('estudiante_id', $studentId)
                 ->where('tipo', 'faltas_excesivas')
                 ->where('resuelta', false)
                 ->delete(); // O update(['resuelta' => true])
@@ -136,6 +206,15 @@ class AttendanceService
 
     public function getDailyAttendance($sectionId)
     {
-        return $this->attendanceRepository->listBySectionAndDate($sectionId, date('Y-m-d'));
+        $fecha = now()->toDateString();
+        $asistencias = $this->attendanceRepository->listBySectionAndDate($sectionId, $fecha);
+        $isOfficial = RegistroAsistenciaOficial::where('seccion_id', $sectionId)
+            ->where('fecha', $fecha)
+            ->exists();
+
+        return [
+            'asistencias' => $asistencias,
+            'is_official' => $isOfficial
+        ];
     }
 }
