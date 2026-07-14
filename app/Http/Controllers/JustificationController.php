@@ -67,12 +67,25 @@ class JustificationController extends Controller
             }
         }
 
+        // Subida de archivos (documento de sustento)
+        $documentoUrl = $existingJustification ? $existingJustification->documento_url : null;
+        if ($request->hasFile('documento')) {
+            $file = $request->file('documento');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            
+            // Usar storage local
+            $path = $file->storeAs('justificaciones', $filename, 'public');
+            $documentoUrl = asset('storage/' . $path);
+        } else if (isset($validated['documento_url'])) {
+            $documentoUrl = $validated['documento_url'];
+        }
+
         $justification = Justificacion::updateOrCreate(
             ['asistencia_id' => $validated['asistencia_id']],
             [
                 'registrado_por' => Auth::id(),
                 'motivo' => $validated['motivo'],
-                'documento_url' => $validated['documento_url'] ?? null,
+                'documento_url' => $documentoUrl,
                 'fecha_presentacion' => $now->toDateString(),
             ]
         );

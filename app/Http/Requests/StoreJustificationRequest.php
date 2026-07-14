@@ -23,6 +23,7 @@ class StoreJustificationRequest extends FormRequest
             'asistencia_id' => ['required', 'exists:asistencias,id'],
             'motivo' => ['required', 'string'],
             'documento_url' => ['nullable', 'string'],
+            'documento' => ['nullable', 'file', 'mimes:pdf,png,jpg,jpeg', 'max:2048'],
         ];
     }
 
@@ -33,7 +34,7 @@ class StoreJustificationRequest extends FormRequest
     {
         $this->merge([
             'motivo' => trim(strip_tags($this->input('motivo'))),
-            'documento_url' => $this->has('documento_url') ? trim(strip_tags($this->input('documento_url'))) : null,
+            'documento_url' => $this->has('documento_url') && is_string($this->input('documento_url')) ? trim(strip_tags($this->input('documento_url'))) : null,
         ]);
     }
 }

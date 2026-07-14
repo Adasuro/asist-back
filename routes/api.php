@@ -47,7 +47,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/students/import', [StudentController::class, 'importCSV']);
 
         // Attendance Routes
+        Route::get('/attendance/unjustified', [App\Http\Controllers\AttendanceController::class, 'unjustified']);
         Route::post('/attendance', [App\Http\Controllers\AttendanceController::class, 'store']);
+        Route::post('/attendance/bulk', [App\Http\Controllers\AttendanceController::class, 'bulkStore']);
         Route::get('/attendance/section/{sectionId}/daily', [App\Http\Controllers\AttendanceController::class, 'sectionDaily']);
         Route::post('/attendance/section/{sectionId}/officiate', [App\Http\Controllers\AttendanceController::class, 'officiate']);
 

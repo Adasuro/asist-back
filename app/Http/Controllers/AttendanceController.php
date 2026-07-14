@@ -42,6 +42,27 @@ class AttendanceController extends Controller
         }
     }
 
+    public function bulkStore(Request $request)
+    {
+        $request->validate([
+            'seccion_id' => 'required|exists:secciones,id',
+            'students' => 'required|array',
+            'students.*.estudiante_id' => 'required|exists:estudiantes,id',
+            'students.*.estado' => 'required|in:presente,falta',
+        ]);
+
+        $this->authorizeAuxiliarForSection($request, $request->input('seccion_id'));
+
+        try {
+            $this->attendanceService->registerBulkAttendance($request->all());
+            return response()->json([
+                'message' => 'Asistencia masiva registrada y oficializada correctamente.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
     public function sectionDaily(Request $request, $sectionId)
     {
         $this->authorizeAuxiliarForSection($request, $sectionId);
@@ -59,6 +80,31 @@ class AttendanceController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 400);
         }
+    }
+
+    public function unjustified(Request $request)
+    {
+        $query = \App\Models\Asistencia::with(['estudiante.seccion.grado'])
+            ->whereIn('estado', ['tardanza', 'falta'])
+            ->whereDoesntHave('justificacion')
+            ->orderBy('fecha', 'desc');
+
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            $query->whereHas('estudiante', function ($q) use ($assignedSections) {
+                $q->whereIn('seccion_id', $assignedSections);
+            });
+        }
+
+        if ($request->has('estudiante_id')) {
+            $query->where('estudiante_id', $request->input('estudiante_id'));
+        }
+
+        if ($request->has('seccion_id')) {
+            $query->where('seccion_id', $request->input('seccion_id'));
+        }
+
+        return response()->json($query->get());
     }
 
     /**
