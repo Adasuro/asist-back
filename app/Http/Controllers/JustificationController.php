@@ -2,13 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Application\Services\AttendanceService;
+use App\Http\Requests\StoreJustificationRequest;
 use App\Models\Asistencia;
 use App\Models\Justificacion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class JustificationController extends Controller
 {
+    public function __construct(
+        protected AttendanceService $attendanceService
+    ) {}
+
     public function index(Request $request)
     {
         $query = Justificacion::with(['asistencia.estudiante.seccion.grado', 'registradoPor'])
@@ -26,28 +33,18 @@ class JustificationController extends Controller
         return response()->json($justifications);
     }
 
-    public function store(Request $request)
+    public function store(StoreJustificationRequest $request)
     {
-        $validated = $request->validate([
-            'asistencia_id' => 'required|exists:asistencias,id',
-            'motivo' => 'required|string',
-            'documento_url' => 'nullable|string',
-        ]);
-
+        $validated = $request->validated();
         $asistencia = Asistencia::findOrFail($validated['asistencia_id']);
         
-        if ($request->user()->rol === 'auxiliar') {
-            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
-            if (!in_array($asistencia->seccion_id, $assignedSections)) {
-                return response()->json(['error' => 'No tiene permiso para justificar en esta sección.'], 403);
-            }
-        }
+        $this->authorizeAuxiliarForSection($request, $asistencia->seccion_id);
 
         $now = now();
 
         // 1. Validar plazo de 3 días hábiles para justificar
-        $fechaAsistencia = \Carbon\Carbon::parse($asistencia->fecha);
-        $diasHabilesTranscurridos = $fechaAsistencia->diffInDaysFiltered(function (\Carbon\Carbon $date) {
+        $fechaAsistencia = Carbon::parse($asistencia->fecha);
+        $diasHabilesTranscurridos = $fechaAsistencia->diffInDaysFiltered(function (Carbon $date) {
             return !$date->isWeekend();
         }, $now);
 
@@ -81,8 +78,7 @@ class JustificationController extends Controller
         );
 
         // Actualizar alertas del estudiante al justificar
-        $attendanceService = app(\App\Application\Services\AttendanceService::class);
-        $attendanceService->checkAndGenerateAlerts($asistencia->estudiante_id);
+        $this->attendanceService->checkAndGenerateAlerts($asistencia->estudiante_id);
 
         return response()->json([
             'message' => 'Justificación registrada correctamente.',
@@ -94,13 +90,23 @@ class JustificationController extends Controller
     {
         $justification = Justificacion::with('asistencia')->where('asistencia_id', $asistenciaId)->first();
         
-        if ($justification && $request->user()->rol === 'auxiliar') {
-            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
-            if (!in_array($justification->asistencia->seccion_id, $assignedSections)) {
-                return response()->json(['error' => 'No tiene permiso.'], 403);
-            }
+        if ($justification) {
+            $this->authorizeAuxiliarForSection($request, $justification->asistencia->seccion_id);
         }
 
         return response()->json($justification);
+    }
+
+    /**
+     * Authorize auxiliary user access for a specific academic section.
+     */
+    private function authorizeAuxiliarForSection(Request $request, $sectionId): void
+    {
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($sectionId, $assignedSections)) {
+                abort(response()->json(['error' => 'No tiene permiso para acceder a esta sección.'], 403));
+            }
+        }
     }
 }

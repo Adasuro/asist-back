@@ -19,7 +19,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::post('/profile', [ProfileController::class, 'update']);
     Route::post('/profile/photo', [ProfileController::class, 'updatePhoto']);
-    Route::patch('/profile/password', [ProfileController::class, 'updatePassword']);
+    Route::patch('/profile/password', [ProfileController::class, 'updatePassword'])->middleware('role:superusuario');
 
     // Dashboard Stats & Sections
     Route::get('/stats/counts', [DashboardController::class, 'getCounts']);

@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Asistencia;
+use App\Models\Estudiante;
+use App\Models\Seccion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Exports\AttendanceExport;
@@ -19,8 +22,7 @@ class ReportController extends Controller
         $sectionId = $request->query('seccion_id');
         $estudianteNombre = $request->query('estudiante_nombre');
 
-        $query = DB::table('asistencias')
-            ->leftJoin('justificaciones', 'asistencias.id', '=', 'justificaciones.asistencia_id')
+        $query = Asistencia::leftJoin('justificaciones', 'asistencias.id', '=', 'justificaciones.asistencia_id')
             ->join('estudiantes', 'asistencias.estudiante_id', '=', 'estudiantes.id')
             ->join('secciones', 'asistencias.seccion_id', '=', 'secciones.id')
             ->join('grados', 'secciones.grado_id', '=', 'grados.id');
@@ -45,9 +47,7 @@ class ReportController extends Controller
 
         // Filtro de sección y seguridad por rol
         if ($user->rol === 'auxiliar') {
-            $seccionesIds = DB::table('auxiliar_secciones')
-                ->where('usuario_id', $user->id)
-                ->pluck('seccion_id');
+            $seccionesIds = $user->secciones()->pluck('secciones.id');
             
             if ($sectionId) {
                 if (!$seccionesIds->contains($sectionId)) {
@@ -114,26 +114,21 @@ class ReportController extends Controller
 
         // Seguridad: Validar acceso del auxiliar
         if ($user->rol === 'auxiliar') {
-            $assigned = DB::table('auxiliar_secciones')
-                ->where('usuario_id', $user->id)
-                ->where('seccion_id', $sectionId)
-                ->exists();
+            $assigned = $user->secciones()->where('secciones.id', $sectionId)->exists();
             if (!$assigned) {
                 return response()->json(['error' => 'No tiene acceso a esta sección.'], 403);
             }
         }
 
-        // Obtener todos los alumnos de la sección para asegurar que aparezcan aunque no tengan asistencias registradas
-        $students = DB::table('estudiantes')
-            ->where('seccion_id', $sectionId)
+        // Obtener todos los alumnos de la sección
+        $students = Estudiante::where('seccion_id', $sectionId)
             ->where('activo', true)
             ->select('id', 'nombre_completo', 'dni')
             ->orderBy('nombre_completo')
             ->get();
 
         $performance = $students->map(function ($student) use ($fechaInicio, $fechaFin) {
-            $query = DB::table('asistencias')
-                ->leftJoin('justificaciones', 'asistencias.id', '=', 'justificaciones.asistencia_id')
+            $query = Asistencia::leftJoin('justificaciones', 'asistencias.id', '=', 'justificaciones.asistencia_id')
                 ->where('asistencias.estudiante_id', $student->id);
 
             if ($fechaInicio && $fechaFin) {
@@ -208,11 +203,15 @@ class ReportController extends Controller
         $seccionId = $request->query('seccion_id');
         $seccionNombre = null;
         if ($seccionId) {
-            $seccionNombre = DB::table('secciones')
-                ->join('grados', 'secciones.grado_id', '=', 'grados.id')
+            $record = Seccion::join('grados', 'secciones.grado_id', '=', 'grados.id')
                 ->where('secciones.id', $seccionId)
-                ->select(DB::raw("CONCAT(grados.nombre, ' - ', secciones.nombre) as full_name"))
-                ->first()?->full_name;
+                ->select('grados.nombre as grado_nombre', 'secciones.nombre as seccion_nombre')
+                ->first();
+            
+            if ($record) {
+                // Evitamos CONCAT de SQL para mantener compatibilidad con SQLite en local
+                $seccionNombre = $record->grado_nombre . ' - ' . $record->seccion_nombre;
+            }
         }
 
         $pdf = Pdf::loadView('reports.attendance', [

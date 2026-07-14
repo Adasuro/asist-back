@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Estudiante;
+use App\Models\Seccion;
+use App\Models\Alerta;
+use App\Models\Asistencia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -13,19 +17,17 @@ class DashboardController extends Controller
 
         if ($user->rol === 'superusuario') {
             return response()->json([
-                'estudiantes' => DB::table('estudiantes')->count(),
-                'secciones' => DB::table('secciones')->count(),
-                'alertas' => DB::table('alertas')->where('resuelta', false)->count(),
+                'estudiantes' => Estudiante::count(),
+                'secciones' => Seccion::count(),
+                'alertas' => Alerta::where('resuelta', false)->count(),
             ]);
         }
 
         // Si es Auxiliar, filtrar por sus secciones
-        $seccionesIds = DB::table('auxiliar_secciones')
-            ->where('usuario_id', $user->id)
-            ->pluck('seccion_id');
+        $seccionesIds = $user->secciones()->pluck('secciones.id');
 
         return response()->json([
-            'estudiantes' => DB::table('estudiantes')->whereIn('seccion_id', $seccionesIds)->count(),
+            'estudiantes' => Estudiante::whereIn('seccion_id', $seccionesIds)->count(),
             'secciones' => $seccionesIds->count(),
             'alertas' => 0, // Por ahora 0 hasta implementar alertas reales por sección
         ]);
@@ -39,9 +41,7 @@ class DashboardController extends Controller
 
         // 1. Determinar el ámbito de secciones
         if ($user->rol === 'auxiliar') {
-            $assignedSecciones = DB::table('auxiliar_secciones')
-                ->where('usuario_id', $user->id)
-                ->pluck('seccion_id');
+            $assignedSecciones = $user->secciones()->pluck('secciones.id');
             
             if ($seccionId) {
                 if (!$assignedSecciones->contains($seccionId)) {
@@ -53,7 +53,7 @@ class DashboardController extends Controller
             }
         } else {
             // Superusuario puede ver todo o filtrar
-            $seccionesIds = $seccionId ? [$seccionId] : DB::table('secciones')->pluck('id')->toArray();
+            $seccionesIds = $seccionId ? [$seccionId] : Seccion::pluck('id')->toArray();
         }
 
         if (empty($seccionesIds)) {
@@ -66,11 +66,10 @@ class DashboardController extends Controller
             ]);
         }
 
-        $totalStudents = DB::table('estudiantes')->whereIn('seccion_id', $seccionesIds)->where('activo', true)->count();
+        $totalStudents = Estudiante::whereIn('seccion_id', $seccionesIds)->where('activo', true)->count();
 
         // 2. Porcentaje de Asistencia Diaria (Hoy)
-        $presentToday = DB::table('asistencias')
-            ->whereIn('seccion_id', $seccionesIds)
+        $presentToday = Asistencia::whereIn('seccion_id', $seccionesIds)
             ->where('fecha', $now->toDateString())
             ->whereIn('estado', ['presente', 'tardanza'])
             ->count();
@@ -78,15 +77,13 @@ class DashboardController extends Controller
         $dailyPercentage = $totalStudents > 0 ? round(($presentToday / $totalStudents) * 100, 1) : 0;
 
         // 3. Porcentaje Mensual
-        $daysInMonth = DB::table('asistencias')
-            ->whereIn('seccion_id', $seccionesIds)
+        $daysInMonth = Asistencia::whereIn('seccion_id', $seccionesIds)
             ->whereMonth('fecha', $now->month)
             ->whereYear('fecha', $now->year)
             ->distinct('fecha')
             ->count('fecha');
 
-        $totalPresentMonth = DB::table('asistencias')
-            ->whereIn('seccion_id', $seccionesIds)
+        $totalPresentMonth = Asistencia::whereIn('seccion_id', $seccionesIds)
             ->whereMonth('fecha', $now->month)
             ->whereYear('fecha', $now->year)
             ->whereIn('estado', ['presente', 'tardanza'])
@@ -97,8 +94,7 @@ class DashboardController extends Controller
             : 0;
 
         // 4. Alumnos Críticos - Faltas Injustificadas (Top 5 del año)
-        $criticalAbsences = DB::table('asistencias')
-            ->join('estudiantes', 'asistencias.estudiante_id', '=', 'estudiantes.id')
+        $criticalAbsences = Asistencia::join('estudiantes', 'asistencias.estudiante_id', '=', 'estudiantes.id')
             ->leftJoin('justificaciones', 'asistencias.id', '=', 'justificaciones.asistencia_id')
             ->whereIn('asistencias.seccion_id', $seccionesIds)
             ->where('asistencias.estado', 'falta')
@@ -111,8 +107,7 @@ class DashboardController extends Controller
             ->get();
 
         // 5. Alumnos Críticos - Tardanzas Injustificadas (Top 5 del mes)
-        $criticalTardiness = DB::table('asistencias')
-            ->join('estudiantes', 'asistencias.estudiante_id', '=', 'estudiantes.id')
+        $criticalTardiness = Asistencia::join('estudiantes', 'asistencias.estudiante_id', '=', 'estudiantes.id')
             ->leftJoin('justificaciones', 'asistencias.id', '=', 'justificaciones.asistencia_id')
             ->whereIn('asistencias.seccion_id', $seccionesIds)
             ->where('asistencias.estado', 'tardanza')
@@ -126,8 +121,7 @@ class DashboardController extends Controller
             ->get();
 
         // 6. Tendencia de los últimos 30 días
-        $trend = DB::table('asistencias')
-            ->whereIn('seccion_id', $seccionesIds)
+        $trend = Asistencia::whereIn('seccion_id', $seccionesIds)
             ->where('fecha', '>=', $now->subDays(30)->toDateString())
             ->select(
                 'fecha',
@@ -153,8 +147,7 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        $query = DB::table('secciones')
-            ->join('grados', 'secciones.grado_id', '=', 'grados.id')
+        $query = Seccion::join('grados', 'secciones.grado_id', '=', 'grados.id')
             ->where('secciones.activo', true)
             ->select(
                 'secciones.id',

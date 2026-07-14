@@ -35,6 +35,15 @@ class User extends Authenticatable
         'activo' => 'boolean',
     ];
 
+    protected $appends = [
+        'foto_url',
+    ];
+
+    public function getFotoUrlAttribute()
+    {
+        return $this->foto_perfil ? \Illuminate\Support\Facades\Storage::disk(config('filesystems.default'))->url($this->foto_perfil) : null;
+    }
+
     protected static function boot()
     {
         parent::boot();
