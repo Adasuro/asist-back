@@ -41,7 +41,7 @@ class User extends Authenticatable
 
     public function getFotoUrlAttribute()
     {
-        return $this->foto_perfil ? \Illuminate\Support\Facades\Storage::disk(config('filesystems.default'))->url($this->foto_perfil) : null;
+        return $this->foto_perfil ? \Illuminate\Support\Facades\Storage::disk('public')->url($this->foto_perfil) : null;
     }
 
     protected static function boot()

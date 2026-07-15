@@ -21,7 +21,7 @@ class UpdateStudentRequest extends FormRequest
     {
         return [
             'nombre_completo' => ['required', 'string', 'max:255'],
-            'dni' => ['required', 'string', 'digits:8'],
+            'dni' => ['required', 'string', 'digits:8', 'unique:estudiantes,dni,' . $this->route('id')],
             'seccion_id' => ['required', 'exists:secciones,id'],
             'fecha_nacimiento' => ['nullable', 'date'],
             'telefono' => ['nullable', 'string'],

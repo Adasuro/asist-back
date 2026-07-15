@@ -61,7 +61,19 @@ Route::middleware('auth:sanctum')->group(function () {
         // Report Routes
         Route::get('/reports/attendance-stats', [App\Http\Controllers\ReportController::class, 'getAttendanceStats']);
         Route::get('/reports/student-performance', [App\Http\Controllers\ReportController::class, 'getStudentPerformance']);
+        Route::get('/reports/rankings', [App\Http\Controllers\ReportController::class, 'getRankings']);
         Route::get('/reports/export-excel', [App\Http\Controllers\ReportController::class, 'exportExcel']);
         Route::get('/reports/export-pdf', [App\Http\Controllers\ReportController::class, 'exportPdf']);
+
+        // Event Routes
+        Route::get('/events', [App\Http\Controllers\EventController::class, 'index']);
+        Route::post('/events', [App\Http\Controllers\EventController::class, 'store']);
+        Route::patch('/events/{id}', [App\Http\Controllers\EventController::class, 'update']);
+        Route::delete('/events/{id}', [App\Http\Controllers\EventController::class, 'destroy']);
+
+        // Alert Routes
+        Route::get('/alerts', [App\Http\Controllers\AlertController::class, 'index']);
+        Route::post('/alerts/{id}/resolve', [App\Http\Controllers\AlertController::class, 'resolve']);
+        Route::post('/alerts/resolve-all', [App\Http\Controllers\AlertController::class, 'resolveAll']);
     });
 });

@@ -20,6 +20,7 @@ class SuperUserController extends Controller
     {
         $auxiliaries = User::where('rol', 'auxiliar')
             ->with(['secciones.grado'])
+            ->orderBy('nombre_completo', 'asc')
             ->get();
 
         return response()->json($auxiliaries);
@@ -145,6 +146,12 @@ class SuperUserController extends Controller
      */
     public function listGrados()
     {
-        return response()->json(Grado::with('secciones')->get());
+        $grados = Grado::with(['secciones' => function($q) {
+            $q->orderBy('nombre', 'asc');
+        }])
+        ->orderBy('nombre', 'asc')
+        ->get();
+
+        return response()->json($grados);
     }
 }

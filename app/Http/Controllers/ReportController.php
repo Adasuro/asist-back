@@ -162,6 +162,58 @@ class ReportController extends Controller
         return response()->json($performance);
     }
 
+    public function getRankings(Request $request)
+    {
+        $user = $request->user();
+        $fechaInicio = $request->query('fecha_inicio');
+        $fechaFin = $request->query('fecha_fin');
+
+        $query = Asistencia::join('secciones', 'asistencias.seccion_id', '=', 'secciones.id')
+            ->join('grados', 'secciones.grado_id', '=', 'grados.id');
+
+        if ($fechaInicio && $fechaFin) {
+            $query->whereBetween('asistencias.fecha', [$fechaInicio, $fechaFin]);
+        } elseif ($fechaInicio) {
+            $query->where('asistencias.fecha', '>=', $fechaInicio);
+        } elseif ($fechaFin) {
+            $query->where('asistencias.fecha', '<=', $fechaFin);
+        } else {
+            $query->whereMonth('asistencias.fecha', now()->month)
+                  ->whereYear('asistencias.fecha', now()->year);
+        }
+
+        if ($user->rol === 'auxiliar') {
+            $seccionesIds = $user->secciones()->pluck('secciones.id')->toArray();
+            $query->whereIn('asistencias.seccion_id', $seccionesIds);
+        }
+
+        $sectionRankingsQuery = clone $query;
+        $sectionRankings = $sectionRankingsQuery->select(
+            'secciones.id',
+            'secciones.nombre as seccion_nombre',
+            'grados.nombre as grado_nombre',
+            DB::raw("SUM(CASE WHEN asistencias.estado = 'falta' THEN 1 ELSE 0 END) as faltas"),
+            DB::raw("SUM(CASE WHEN asistencias.estado = 'tardanza' THEN 1 ELSE 0 END) as tardanzas")
+        )
+        ->groupBy('secciones.id', 'secciones.nombre', 'grados.nombre')
+        ->get();
+
+        $gradeRankingsQuery = clone $query;
+        $gradeRankings = $gradeRankingsQuery->select(
+            'grados.id',
+            'grados.nombre as grado_nombre',
+            DB::raw("SUM(CASE WHEN asistencias.estado = 'falta' THEN 1 ELSE 0 END) as faltas"),
+            DB::raw("SUM(CASE WHEN asistencias.estado = 'tardanza' THEN 1 ELSE 0 END) as tardanzas")
+        )
+        ->groupBy('grados.id', 'grados.nombre')
+        ->get();
+
+        return response()->json([
+            'secciones' => $sectionRankings,
+            'grados' => $gradeRankings
+        ]);
+    }
+
     public function exportExcel(Request $request)
     {
         $query = $this->getBaseQuery($request);

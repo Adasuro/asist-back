@@ -18,8 +18,7 @@ class JustificationController extends Controller
 
     public function index(Request $request)
     {
-        $query = Justificacion::with(['asistencia.estudiante.seccion.grado', 'registradoPor'])
-            ->orderBy('created_at', 'desc');
+        $query = Justificacion::with(['asistencia.estudiante.seccion.grado', 'registradoPor']);
 
         if ($request->user()->rol === 'auxiliar') {
             $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
@@ -28,7 +27,11 @@ class JustificationController extends Controller
             });
         }
 
-        $justifications = $query->get();
+        $justifications = $query->get()
+            ->sortBy(function ($justificacion) {
+                return $justificacion->asistencia->estudiante->nombre_completo ?? '';
+            })
+            ->values();
             
         return response()->json($justifications);
     }

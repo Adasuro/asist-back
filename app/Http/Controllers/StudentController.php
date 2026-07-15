@@ -18,7 +18,7 @@ class StudentController extends Controller
 
     public function index(Request $request)
     {
-        $filters = $request->only(['grado_id', 'seccion_id', 'search']);
+        $filters = $request->only(['grado_id', 'seccion_id', 'search', 'per_page']);
         
         if ($request->user()->rol === 'auxiliar') {
             $filters['secciones_ids'] = $request->user()->secciones()->pluck('secciones.id')->toArray();

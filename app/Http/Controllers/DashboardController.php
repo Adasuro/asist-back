@@ -154,7 +154,9 @@ class DashboardController extends Controller
                 'secciones.nombre',
                 'grados.nombre as grado_nombre',
                 'grados.nivel as grado_nivel'
-            );
+            )
+            ->orderBy('grados.nombre', 'asc')
+            ->orderBy('secciones.nombre', 'asc');
 
         if ($user->rol === 'auxiliar') {
             $query->join('auxiliar_secciones', 'secciones.id', '=', 'auxiliar_secciones.seccion_id')

@@ -34,7 +34,9 @@ class EloquentStudentRepository implements StudentRepositoryInterface
             });
         }
 
-        return $query->paginate(20);
+        $perPage = isset($filters['per_page']) && is_numeric($filters['per_page']) ? (int)$filters['per_page'] : 20;
+
+        return $query->orderBy('nombre_completo', 'asc')->paginate($perPage);
     }
 
     public function findByDni(string $dni): ?Estudiante

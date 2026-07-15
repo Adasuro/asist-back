@@ -42,7 +42,7 @@ class ProfileController extends Controller
     {
         $user = $request->user();
         $file = $request->file('foto');
-        $disk = config('filesystems.default'); // dynamic disk for local/production parity
+        $disk = 'public';
 
         try {
             $filename = 'profiles/' . $user->id . '_' . time() . '.webp';
