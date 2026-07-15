@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CreateAuxiliarRequest;
+use App\Http\Requests\UpdateAuxiliarRequest;
+use App\Http\Requests\UpdateAuxiliarPasswordRequest;
 use App\Models\User;
 use App\Models\Grado;
 use App\Models\AuxiliarSeccion;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rules\Password;
 
 class SuperUserController extends Controller
 {
@@ -19,6 +20,7 @@ class SuperUserController extends Controller
     {
         $auxiliaries = User::where('rol', 'auxiliar')
             ->with(['secciones.grado'])
+            ->orderBy('nombre_completo', 'asc')
             ->get();
 
         return response()->json($auxiliaries);
@@ -27,28 +29,22 @@ class SuperUserController extends Controller
     /**
      * Create a new auxiliary account and assign to a grade.
      */
-    public function createAuxiliar(Request $request)
+    public function createAuxiliar(CreateAuxiliarRequest $request)
     {
-        $request->validate([
-            'nombre_completo' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:usuarios',
-            'dni' => 'required|string|size:8|unique:usuarios',
-            'password' => ['required', Password::defaults()],
-            'grado_id' => 'required|uuid|exists:grados,id',
-        ]);
+        $validated = $request->validated();
 
-        return DB::transaction(function () use ($request) {
+        return DB::transaction(function () use ($validated) {
             $user = User::create([
-                'nombre_completo' => $request->nombre_completo,
-                'email' => $request->email,
-                'dni' => $request->dni,
-                'password' => Hash::make($request->password),
+                'nombre_completo' => $validated['nombre_completo'],
+                'email' => $validated['email'],
+                'dni' => $validated['dni'],
+                'password' => Hash::make($validated['password']),
                 'rol' => 'auxiliar',
                 'activo' => true,
             ]);
 
             // Assign to all sections of the grade
-            $grado = Grado::with('secciones')->find($request->grado_id);
+            $grado = Grado::with('secciones')->find($validated['grado_id']);
             foreach ($grado->secciones as $seccion) {
                 AuxiliarSeccion::create([
                     'usuario_id' => $user->id,
@@ -67,7 +63,7 @@ class SuperUserController extends Controller
     /**
      * Update an existing auxiliary.
      */
-    public function updateAuxiliar(Request $request, $id)
+    public function updateAuxiliar(UpdateAuxiliarRequest $request, $id)
     {
         $user = User::findOrFail($id);
 
@@ -75,26 +71,21 @@ class SuperUserController extends Controller
             return response()->json(['message' => 'Solo se puede editar auxiliares.'], 400);
         }
 
-        $request->validate([
-            'nombre_completo' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:usuarios,email,' . $user->id,
-            'dni' => 'required|string|size:8|unique:usuarios,dni,' . $user->id,
-            'grado_id' => 'required|uuid|exists:grados,id',
-        ]);
+        $validated = $request->validated();
 
-        return DB::transaction(function () use ($request, $user) {
+        return DB::transaction(function () use ($validated, $user) {
             $user->update([
-                'nombre_completo' => $request->nombre_completo,
-                'email' => $request->email,
-                'dni' => $request->dni,
+                'nombre_completo' => $validated['nombre_completo'],
+                'email' => $validated['email'],
+                'dni' => $validated['dni'],
             ]);
 
             // Actualizar asignación de grado si ha cambiado
             $currentGradoId = $user->secciones()->first()?->grado_id;
 
-            if ($currentGradoId !== $request->grado_id) {
+            if ($currentGradoId !== $validated['grado_id']) {
                 AuxiliarSeccion::where('usuario_id', $user->id)->delete();
-                $grado = Grado::with('secciones')->find($request->grado_id);
+                $grado = Grado::with('secciones')->find($validated['grado_id']);
                 foreach ($grado->secciones as $seccion) {
                     AuxiliarSeccion::create([
                         'usuario_id' => $user->id,
@@ -134,19 +125,17 @@ class SuperUserController extends Controller
     /**
      * Change auxiliary password.
      */
-    public function updateAuxiliarPassword(Request $request, $id)
+    public function updateAuxiliarPassword(UpdateAuxiliarPasswordRequest $request, $id)
     {
-        $request->validate([
-            'password' => ['required', Password::defaults()],
-        ]);
-
         $user = User::findOrFail($id);
         
         if ($user->rol !== 'auxiliar') {
             return response()->json(['message' => 'Solo se puede cambiar la contraseña de auxiliares.'], 400);
         }
 
-        $user->password = Hash::make($request->password);
+        $validated = $request->validated();
+
+        $user->password = Hash::make($validated['password']);
         $user->save();
 
         return response()->json(['message' => 'Contraseña actualizada correctamente.']);
@@ -157,6 +146,12 @@ class SuperUserController extends Controller
      */
     public function listGrados()
     {
-        return response()->json(Grado::with('secciones')->get());
+        $grados = Grado::with(['secciones' => function($q) {
+            $q->orderBy('nombre', 'asc');
+        }])
+        ->orderBy('nombre', 'asc')
+        ->get();
+
+        return response()->json($grados);
     }
 }

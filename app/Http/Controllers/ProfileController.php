@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateProfileRequest;
+use App\Http\Requests\UpdatePhotoRequest;
+use App\Http\Requests\UpdatePasswordRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
-use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
 {
@@ -22,17 +24,10 @@ class ProfileController extends Controller
     /**
      * Update basic profile information.
      */
-    public function update(Request $request)
+    public function update(UpdateProfileRequest $request)
     {
         $user = $request->user();
-
-        $request->validate([
-            'telefono' => 'nullable|string|max:20',
-            'direccion' => 'nullable|string|max:255',
-            'fecha_nacimiento' => 'nullable|date',
-        ]);
-
-        $user->update($request->only(['telefono', 'direccion', 'fecha_nacimiento']));
+        $user->update($request->validated());
 
         return response()->json([
             'message' => 'Perfil actualizado correctamente.',
@@ -43,14 +38,11 @@ class ProfileController extends Controller
     /**
      * Update profile photo.
      */
-    public function updatePhoto(Request $request)
+    public function updatePhoto(UpdatePhotoRequest $request)
     {
-        $request->validate([
-            'foto' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-        ]);
-
         $user = $request->user();
         $file = $request->file('foto');
+        $disk = 'public';
 
         try {
             $filename = 'profiles/' . $user->id . '_' . time() . '.webp';
@@ -61,16 +53,16 @@ class ProfileController extends Controller
                 $image = $manager->read($file->getRealPath());
                 $image->cover(400, 400);
                 $encoded = $image->toWebp(80);
-                Storage::disk('public')->put($filename, $encoded);
+                Storage::disk($disk)->put($filename, $encoded);
             } else {
-                // Fallback: just save the file (might not be webp if uploaded as something else)
-                $path = $file->store('profiles', 'public');
+                // Fallback: just save the file
+                $path = $file->store('profiles', $disk);
                 $filename = $path;
             }
 
             // Delete old photo if exists
             if ($user->foto_perfil) {
-                Storage::disk('public')->delete($user->foto_perfil);
+                Storage::disk($disk)->delete($user->foto_perfil);
             }
 
             // Update user record
@@ -79,7 +71,7 @@ class ProfileController extends Controller
 
             return response()->json([
                 'message' => 'Foto de perfil actualizada.',
-                'foto_url' => asset('storage/' . $filename),
+                'foto_url' => Storage::disk($disk)->url($filename),
                 'user' => $user,
             ]);
         } catch (\Exception $e) {
@@ -91,23 +83,11 @@ class ProfileController extends Controller
     }
 
     /**
-     * Update password (Only for Superusers).
+     * Update password (Only for Authorized Users).
      */
-    public function updatePassword(Request $request)
+    public function updatePassword(UpdatePasswordRequest $request)
     {
         $user = $request->user();
-
-        if ($user->rol !== 'superusuario') {
-            return response()->json([
-                'message' => 'Los auxiliares no pueden cambiar su propia contraseña. Contacte al administrador.',
-            ], 403);
-        }
-
-        $request->validate([
-            'current_password' => 'required|current_password',
-            'password' => ['required', 'confirmed', Password::defaults()],
-        ]);
-
         $user->password = Hash::make($request->password);
         $user->save();
 

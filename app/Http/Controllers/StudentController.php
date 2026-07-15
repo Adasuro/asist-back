@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Application\Services\StudentService;
+use App\Http\Requests\StoreStudentRequest;
+use App\Http\Requests\UpdateStudentRequest;
 use Illuminate\Http\Request;
 
 class StudentController extends Controller
@@ -16,7 +18,7 @@ class StudentController extends Controller
 
     public function index(Request $request)
     {
-        $filters = $request->only(['grado_id', 'seccion_id', 'search']);
+        $filters = $request->only(['grado_id', 'seccion_id', 'search', 'per_page']);
         
         if ($request->user()->rol === 'auxiliar') {
             $filters['secciones_ids'] = $request->user()->secciones()->pluck('secciones.id')->toArray();
@@ -25,18 +27,11 @@ class StudentController extends Controller
         return response()->json($this->studentService->listStudents($filters));
     }
 
-    public function store(Request $request)
+    public function store(StoreStudentRequest $request)
     {
-        $validated = $request->validate([
-            'nombre_completo' => 'required|string|max:255',
-            'dni' => 'required|string|digits:8',
-            'seccion_id' => 'required|exists:secciones,id',
-            'fecha_nacimiento' => 'nullable|date',
-            'telefono' => 'nullable|string',
-            'direccion' => 'nullable|string',
-        ]);
+        $this->authorizeAuxiliarForSection($request, $request->seccion_id);
 
-        $student = $this->studentService->registerStudent($validated);
+        $student = $this->studentService->registerStudent($request->validated());
 
         return response()->json([
             'message' => 'Estudiante registrado correctamente.',
@@ -51,40 +46,22 @@ class StudentController extends Controller
             return response()->json(['message' => 'Estudiante no encontrado.'], 404);
         }
 
-        if ($request->user()->rol === 'auxiliar') {
-            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
-            if (!in_array($student->seccion_id, $assignedSections)) {
-                return response()->json(['message' => 'No tiene permiso para acceder a este estudiante.'], 403);
-            }
-        }
+        $this->authorizeAuxiliarForStudent($request, $student);
 
         return response()->json($student);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateStudentRequest $request, $id)
     {
         $student = $this->studentService->getStudentById($id);
         if (!$student) {
             return response()->json(['message' => 'Estudiante no encontrado.'], 404);
         }
 
-        if ($request->user()->rol === 'auxiliar') {
-            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
-            if (!in_array($student->seccion_id, $assignedSections)) {
-                return response()->json(['message' => 'No tiene permiso para actualizar a este estudiante.'], 403);
-            }
-        }
+        $this->authorizeAuxiliarForStudent($request, $student);
+        $this->authorizeAuxiliarForSection($request, $request->seccion_id);
 
-        $validated = $request->validate([
-            'nombre_completo' => 'required|string|max:255',
-            'dni' => 'required|string|digits:8',
-            'seccion_id' => 'required|exists:secciones,id',
-            'fecha_nacimiento' => 'nullable|date',
-            'telefono' => 'nullable|string',
-            'direccion' => 'nullable|string',
-        ]);
-
-        $updatedStudent = $this->studentService->updateStudent($id, $validated);
+        $updatedStudent = $this->studentService->updateStudent($id, $request->validated());
 
         return response()->json([
             'message' => 'Estudiante actualizado correctamente.',
@@ -99,12 +76,7 @@ class StudentController extends Controller
             return response()->json(['message' => 'Estudiante no encontrado.'], 404);
         }
 
-        if ($request->user()->rol === 'auxiliar') {
-            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
-            if (!in_array($student->seccion_id, $assignedSections)) {
-                return response()->json(['message' => 'No tiene permiso para eliminar a este estudiante.'], 403);
-            }
-        }
+        $this->authorizeAuxiliarForStudent($request, $student);
 
         $this->studentService->deleteStudent($id);
         return response()->json(['message' => 'Estudiante eliminado correctamente.']);
@@ -138,5 +110,31 @@ class StudentController extends Controller
             "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
             "Expires"             => "0"
         ]);
+    }
+
+    /**
+     * Authorize auxiliary user access for a specific student.
+     */
+    private function authorizeAuxiliarForStudent(Request $request, $student): void
+    {
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($student->seccion_id, $assignedSections)) {
+                abort(response()->json(['message' => 'No tiene permiso para acceder a este estudiante.'], 403));
+            }
+        }
+    }
+
+    /**
+     * Authorize auxiliary user access for a specific academic section.
+     */
+    private function authorizeAuxiliarForSection(Request $request, $sectionId): void
+    {
+        if ($request->user()->rol === 'auxiliar') {
+            $assignedSections = $request->user()->secciones()->pluck('secciones.id')->toArray();
+            if (!in_array($sectionId, $assignedSections)) {
+                abort(response()->json(['message' => 'No tiene permiso para acceder a esta sección.'], 403));
+            }
+        }
     }
 }

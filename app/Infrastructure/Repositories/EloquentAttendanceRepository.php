@@ -31,6 +31,10 @@ class EloquentAttendanceRepository implements AttendanceRepositoryInterface
         return Asistencia::with(['estudiante', 'justificacion'])
             ->where('seccion_id', $sectionId)
             ->where('fecha', $date)
-            ->get();
+            ->get()
+            ->sortBy(function ($asistencia) {
+                return $asistencia->estudiante->nombre_completo ?? '';
+            })
+            ->values();
     }
 }

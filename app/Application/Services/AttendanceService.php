@@ -8,6 +8,7 @@ use App\Models\Asistencia;
 use App\Models\Alerta;
 use App\Models\RegistroAsistenciaOficial;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class AttendanceService
 {
@@ -40,65 +41,103 @@ class AttendanceService
             throw new \Exception("Solo se pueden registrar o editar asistencias del día en curso.");
         }
 
-        // Verificar si la asistencia ya ha sido confirmada (oficializada)
-        $isOfficial = RegistroAsistenciaOficial::where('seccion_id', $student->seccion_id)
+        $existing = Asistencia::where('estudiante_id', $student->id)
+            ->where('fecha', $currentDate)
+            ->first();
+
+        // Si ya existe registro de hoy, aplicar reglas estrictas de edición
+        if ($existing) {
+            $newStatus = $data['estado'] ?? 'presente';
+            
+            // Si el método es 'codigo' (QR), siempre transiciona a tardanza
+            if (($data['metodo_registro'] ?? 'manual') === 'codigo') {
+                $newStatus = 'tardanza';
+            }
+
+            // La única transición permitida es de FALTA a TARDANZA dentro del día
+            if ($existing->estado !== 'falta' || $newStatus !== 'tardanza') {
+                throw new \Exception("BLOQUEADO: Solo se permite actualizar el estado de 'Falta' a 'Tardanza' durante el día en curso.");
+            }
+
+            $existing->estado = 'tardanza';
+            $existing->hora_llegada = $now->format('H:i:s');
+            $existing->metodo_registro = $data['metodo_registro'] ?? 'manual';
+            $existing->registrado_por = Auth::id();
+            $existing->save();
+
+            try {
+                $this->checkAndGenerateAlerts($student->id);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Error al generar alertas: " . $e->getMessage());
+            }
+
+            return $existing;
+        }
+
+        // Si no existe registro previo, significa que no se ha hecho la carga masiva inicial
+        throw new \Exception("BLOQUEADO: Debe registrar la asistencia masiva inicial de la sección antes de registrar tardanzas individuales.");
+    }
+
+    public function registerBulkAttendance(array $data)
+    {
+        $sectionId = $data['seccion_id'];
+        $now = now();
+        $currentDate = $now->toDateString();
+
+        // 1. Validar que no exista oficialización previa para hoy
+        $isOfficial = RegistroAsistenciaOficial::where('seccion_id', $sectionId)
             ->where('fecha', $currentDate)
             ->exists();
 
         if ($isOfficial) {
-            $existing = Asistencia::where('estudiante_id', $student->id)
-                ->where('fecha', $currentDate)
-                ->first();
-
-            $newStatus = $data['estado'] ?? 'presente';
-
-            // Regla 1: No se puede marcar como "Presente" si ya es oficial
-            if ($newStatus === 'presente') {
-                throw new \Exception("BLOQUEADO: No se puede registrar como 'Presente' después de la confirmación oficial.");
-            }
-
-            // Regla 2: Si el registro previo era "Presente", ya no se puede modificar
-            if ($existing && $existing->estado === 'presente') {
-                throw new \Exception("BLOQUEADO: Los registros marcados como 'Presente' son inmutables tras la confirmación.");
-            }
-        }
-        
-        $currentTime = $now->format('H:i:s');
-        
-        $status = $data['estado'] ?? 'presente';
-
-        // Lógica de automatización por horario para registros por código
-        if (($data['metodo_registro'] ?? 'manual') === 'codigo') {
-            $entryTime = $now->format('H:i');
-            
-            if ($entryTime >= '10:18' && $entryTime <= '10:25') {
-                $status = 'presente';
-            } else {
-                $status = 'tardanza';
-            }
+            throw new \Exception("La asistencia de hoy para esta sección ya ha sido registrada y oficializada.");
         }
 
-        $registrationData = [
-            'estudiante_id' => $student->id,
-            'registrado_por' => Auth::id(),
-            'seccion_id' => $student->seccion_id,
-            'fecha' => $currentDate,
-            'estado' => $status,
-            'hora_llegada' => $currentTime,
-            'metodo_registro' => $data['metodo_registro'] ?? 'manual',
-            'observacion' => $data['observacion'] ?? null,
-        ];
-
-        $attendance = $this->attendanceRepository->register($registrationData);
-
-        // Disparar validación de alertas de forma segura
-        try {
-            $this->checkAndGenerateAlerts($student->id);
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Error al generar alertas: " . $e->getMessage());
+        // 2. Procesar la lista de estudiantes
+        $studentsData = $data['students'] ?? [];
+        if (empty($studentsData)) {
+            throw new \Exception("La lista de alumnos no puede estar vacía.");
         }
 
-        return $attendance;
+        DB::transaction(function () use ($studentsData, $sectionId, $currentDate, $now) {
+            foreach ($studentsData as $item) {
+                $studentId = $item['estudiante_id'];
+                $status = $item['estado'] ?? 'presente';
+
+                if (!in_array($status, ['presente', 'falta'])) {
+                    throw new \Exception("Para el registro inicial, los estados permitidos son únicamente 'presente' o 'falta'.");
+                }
+
+                // Registrar o actualizar asistencia
+                Asistencia::updateOrCreate(
+                    [
+                        'estudiante_id' => $studentId,
+                        'fecha' => $currentDate,
+                    ],
+                    [
+                        'registrado_por' => Auth::id(),
+                        'seccion_id' => $sectionId,
+                        'estado' => $status,
+                        'hora_llegada' => $now->format('H:i:s'),
+                        'metodo_registro' => 'manual',
+                    ]
+                );
+
+                // Disparar alertas correspondientes si es falta
+                if ($status === 'falta') {
+                    $this->checkAndGenerateAlerts($studentId);
+                }
+            }
+
+            // 3. Crear el registro de oficialización para cerrar el registro inicial
+            RegistroAsistenciaOficial::create([
+                'seccion_id' => $sectionId,
+                'fecha' => $currentDate,
+                'oficializado_por' => Auth::id()
+            ]);
+        });
+
+        return true;
     }
 
     public function officiateSection($sectionId)

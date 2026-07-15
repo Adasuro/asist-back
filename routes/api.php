@@ -19,7 +19,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::post('/profile', [ProfileController::class, 'update']);
     Route::post('/profile/photo', [ProfileController::class, 'updatePhoto']);
-    Route::patch('/profile/password', [ProfileController::class, 'updatePassword']);
+    Route::patch('/profile/password', [ProfileController::class, 'updatePassword'])->middleware('role:superusuario');
 
     // Dashboard Stats & Sections
     Route::get('/stats/counts', [DashboardController::class, 'getCounts']);
@@ -47,7 +47,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/students/import', [StudentController::class, 'importCSV']);
 
         // Attendance Routes
+        Route::get('/attendance/unjustified', [App\Http\Controllers\AttendanceController::class, 'unjustified']);
         Route::post('/attendance', [App\Http\Controllers\AttendanceController::class, 'store']);
+        Route::post('/attendance/bulk', [App\Http\Controllers\AttendanceController::class, 'bulkStore']);
         Route::get('/attendance/section/{sectionId}/daily', [App\Http\Controllers\AttendanceController::class, 'sectionDaily']);
         Route::post('/attendance/section/{sectionId}/officiate', [App\Http\Controllers\AttendanceController::class, 'officiate']);
 
@@ -59,7 +61,19 @@ Route::middleware('auth:sanctum')->group(function () {
         // Report Routes
         Route::get('/reports/attendance-stats', [App\Http\Controllers\ReportController::class, 'getAttendanceStats']);
         Route::get('/reports/student-performance', [App\Http\Controllers\ReportController::class, 'getStudentPerformance']);
+        Route::get('/reports/rankings', [App\Http\Controllers\ReportController::class, 'getRankings']);
         Route::get('/reports/export-excel', [App\Http\Controllers\ReportController::class, 'exportExcel']);
         Route::get('/reports/export-pdf', [App\Http\Controllers\ReportController::class, 'exportPdf']);
+
+        // Event Routes
+        Route::get('/events', [App\Http\Controllers\EventController::class, 'index']);
+        Route::post('/events', [App\Http\Controllers\EventController::class, 'store']);
+        Route::patch('/events/{id}', [App\Http\Controllers\EventController::class, 'update']);
+        Route::delete('/events/{id}', [App\Http\Controllers\EventController::class, 'destroy']);
+
+        // Alert Routes
+        Route::get('/alerts', [App\Http\Controllers\AlertController::class, 'index']);
+        Route::post('/alerts/{id}/resolve', [App\Http\Controllers\AlertController::class, 'resolve']);
+        Route::post('/alerts/resolve-all', [App\Http\Controllers\AlertController::class, 'resolveAll']);
     });
 });
